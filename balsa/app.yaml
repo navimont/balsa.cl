@@ -1,0 +1,34 @@
+application: balsa-search
+version: 1
+runtime: python
+api_version: 1
+
+handlers:
+- url: /static
+  static_dir: static
+
+- url: /favicon\.ico
+  static_files: static/images/favicon.ico
+  upload: static/images/favicon\.ico
+
+- url: /robots\.txt
+  static_files: static/robots.txt
+  upload: static/robots.txt
+
+- url: ((/_ah/login_required|/openid_login))
+  script: balsa_login.py
+
+- url: (/)
+  script: balsa_main.py
+
+- url: (/import/store)
+  script: balsa_import.py
+  login: admin
+
+- url: (/import.*)
+  script: balsa_import.py
+  login: required
+
+- url: (/update.*)
+  script: balsa_update.py
+  login: required

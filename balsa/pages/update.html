@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block content %}
+    {% for error in errors %}
+        <div class="error">{{ error }}</div>
+    {% endfor %}
+    <title>Admin page - Update stops, stations & places</title>
+
+    <header>
+      <h1>Data statistics<h1>
+    </header>
+
+    <article>
+        <table>
+            <tr>
+                <td></td>
+                <td>STOP</td>
+                <td>STATION</td>
+                <td>PLACE</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>production data</td>
+                <td>{{production_num_stops}}</td>
+                <td>{{production_num_stations}}</td>
+                <td>{{production_num_places}}</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>updated (awaiting confirmation)</td>
+                <td>{{update_num_stops}}</td>
+                <td>{{update_num_stations}}</td>
+                <td>{{update_num_places}}</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td>new or replaced (awaiting confirmation)</td>
+                <td>{{new_num_stops}}</td>
+                <td>{{new_num_stations}}</td>
+                <td>{{new_num_places}}</td>
+                <td></td>
+            </tr>
+        </table>
+    </article>
+
+    <header>
+      <h1>Upload Openstreetmap data for import<h1>
+    </header>
+
+    <article>
+      <!-- uploads file to blobstore -->
+      <form action="{{ upload_url }}" enctype="multipart/form-data" method="post">
+        <div><label>Import file:</label></div>
+        <div><input type="file" name="osmdata"/></div>
+        <p>You may use a zip compressed file.</p>
+        <div><input class="button" type="submit" value="load"/></div>
+      </form>
+    </article>
+{% endblock %}
