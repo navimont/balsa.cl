@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block content %}
+    {% for error in errors %}
+        <div class="error">{{ error }}</div>
+    {% endfor %}
+    <title>Admin page - Confirm update stops, stations & places</title>
+
+    <article>
+        <table>
+            <tr>
+                <td></td>
+                <td>STOP</td>
+                <td>STATION</td>
+                <td>PLACE</td>
+                <td>Location zoom</td>
+            </tr>
+            <tr>
+                <td>updated (awaiting confirmation)</td>
+                <td>{{update_num_stops}}</td>
+                <td>{{update_num_stations}}</td>
+                <td>{{update_num_places}}</td>
+                <td>
+                  <form action="/update/confirm/update/next" method="get">
+                      <input type="hidden" name="key" value="{{compare.key}}">
+                      <input class="button" type="submit" value="Next"/>
+                  </form>
+                </td>
+            </tr>
+        </table>
+    </article>
+
+    <header>
+      <h1>Please check updated stop:<h1>
+    </header>
+
+    <article>
+        <table>
+            <tr>
+                <td></td>
+                <td>Production</td>
+                <td>Updated</td>
+            </tr>
+            {% for attr in compare.data %}
+              <tr>
+                <td>{{ attr.type }}</td>
+                <td>{{ attr.production }}</td>
+                <td>{{ attr.update }}</td>
+              </tr>
+            {% endfor %}
+            <tr>
+                <td></td>
+                <td></td>
+                <td>
+                  <form action="/update/confirm/update/accept" method="get">
+                      <input type="hidden" name="key" value="{{compare.key}}">
+                      <input class="button" type="submit" value="Accept"/>
+                  </form>
+                  <form action="/update/confirm/update/reject" method="get">
+                      <input type="hidden" name="key" value="{{compare.key}}">
+                      <input class="button" type="submit" value="Reject"/>
+                  </form>
+                </td>
+            </tr>
+    </article>
+
+    <p>Go back to <a href="/update">update page.</a></p>
+{% endblock %}

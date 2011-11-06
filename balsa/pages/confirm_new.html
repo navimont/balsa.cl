@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block content %}
+    {% for error in errors %}
+        <div class="error">{{ error }}</div>
+    {% endfor %}
+    <title>Admin page - Confirm new stops, stations & places</title>
+
+    <article>
+        <table>
+            <tr>
+                <td></td>
+                <td>STOP</td>
+                <td>STATION</td>
+                <td>PLACE</td>
+            </tr>
+            <tr>
+                <td>New (awaiting confirmation)</td>
+                <td>{{new_num_stops}}</td>
+                <td>{{new_num_stations}}</td>
+                <td>{{new_num_places}}</td>
+                <td>
+                  <form action="/update/confirm/new" method="get">
+                      <input type="hidden" name="offset" value="{{offset}}">
+                      <input class="button" type="submit" value="Next"/>
+                  </form>
+                </td>
+            </tr>
+        </table>
+    </article>
+
+    <header>
+      <h1>Please check new stop:<h1>
+    </header>
+
+    <article>
+        <table>
+          <form action="/update/confirm/update/accept" method="get">
+            {% for stop in compare %}
+              <tr>
+                <td>{{ stop.description }}</td>
+                <td>{{ stop.type }}</td>
+                <td>{{ stop.name }}</td>
+                <td>{{ stop.lat }}</td>
+                <td>{{ stop.lon }}</td>
+                <td>
+                  {% if stop.new %}
+                    <input class="button" type="submit" value="Accept"/>
+                  {% else %}
+                    <input type="checkbox" name="obsolete_key" value="{{stop.key}}">
+                    obsolete
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </form>
+        </table>
+    </article>
+
+    <p>Go back to <a href="/update">update page.</a></p>
+{% endblock %}

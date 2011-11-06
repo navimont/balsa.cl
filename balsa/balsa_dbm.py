@@ -11,12 +11,19 @@ from geo.geomodel import GeoModel
 import settings
 
 
+
+class GovMeta(db.Model):
+    """Keep number of Gov entries"""
+    counter = db.IntegerProperty()
+
 class GovName(db.Model):
     """Hold a list of adminstrative entities. Example: Region Metropolitana, Chile"""
 
     # in unicode
     gov_names = db.StringListProperty()
 
+    def __str__(self):
+        return "<%s> %s" % (self.__class__,", ".join(self.gov_names))
 
 class StopMeta(db.Model):
     """Keep track of number of datasets stored
@@ -25,15 +32,16 @@ class StopMeta(db.Model):
     STOP, STATION, PLACE with confirmation NO, UPDATE and NEW
     """
 
-    # type of Stop
-    stop_type = db.StringProperty(choices=settings.STOP_TYPES)
-    #  confirmation status
-    confirm = db.StringProperty(choices=settings.CONFIRM_TYPES)
-    # counter
-    counter = db.IntegerProperty()
+    counter_stop_no_confirm = db.IntegerProperty()
+    counter_stop_new_confirm = db.IntegerProperty()
+    counter_stop_update_confirm = db.IntegerProperty()
+    counter_station_no_confirm = db.IntegerProperty()
+    counter_station_new_confirm = db.IntegerProperty()
+    counter_station_update_confirm = db.IntegerProperty()
+    counter_place_no_confirm = db.IntegerProperty()
+    counter_place_new_confirm = db.IntegerProperty()
+    counter_place_update_confirm = db.IntegerProperty()
 
-    def __str__(self):
-        return "<StopMeta> %s %s %d" % (self.stop_type, self.confirm, self.counter)
 
 class Stop(GeoModel):
     """Lists bus stops, train halts, terminals, stations on ordinary
@@ -60,4 +68,13 @@ class Stop(GeoModel):
     confirm = db.StringProperty(choices=settings.CONFIRM_TYPES)
 
     def __str__(self):
-        return "<Stop> id=%d %s" % (self.osm_id, " ".join(self.names))
+        return "<Stop> id=%d %s (lat=%3.3f,lon=%3.3f)" % (self.osm_id, " ".join(self.names),self.location.lat,self.location.lon)
+
+    def __eq__(self,other):
+        if not other or not isinstance(other, self.__class__):
+            return False
+        # test for equal fields
+        if self.osm_id == other.osm_id and self.names == other.names and self.stop_type == other.stop_type and self.location == other.location:
+            return True
+        return False
+

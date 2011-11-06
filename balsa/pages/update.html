@@ -6,6 +6,13 @@
     {% endfor %}
     <title>Admin page - Update stops, stations & places</title>
 
+    {% if import_status %}
+        <p>{{ import_status }}</p>
+    {% endif %}
+    {% if update_status %}
+        <p>{{ update_status }}</p>
+    {% endif %}
+
     <header>
       <h1>Data statistics<h1>
     </header>
@@ -17,30 +24,39 @@
                 <td>STOP</td>
                 <td>STATION</td>
                 <td>PLACE</td>
-                <td></td>
+                <td>Location zoom</td>
             </tr>
             <tr>
                 <td>production data</td>
                 <td>{{production_num_stops}}</td>
                 <td>{{production_num_stations}}</td>
                 <td>{{production_num_places}}</td>
-                <td></td>
+                <td>{{gov_num}}</td>
             </tr>
             <tr>
                 <td>updated (awaiting confirmation)</td>
                 <td>{{update_num_stops}}</td>
                 <td>{{update_num_stations}}</td>
                 <td>{{update_num_places}}</td>
-                <td></td>
+                <td>
+                  <form action="/update/confirm/update" method="get">
+                      <input class="button" type="submit" value="Confirm update"/>
+                  </form>
+                </td>
             </tr>
             <tr>
                 <td>new or replaced (awaiting confirmation)</td>
                 <td>{{new_num_stops}}</td>
                 <td>{{new_num_stations}}</td>
                 <td>{{new_num_places}}</td>
-                <td></td>
+                <td>
+                  <form action="/update/confirm/new" method="get">
+                      <input class="button" type="submit" value="Confirm additions"/>
+                  </form>
+                </td>
             </tr>
         </table>
+
     </article>
 
     <header>
@@ -50,6 +66,7 @@
     <article>
       <!-- uploads file to blobstore -->
       <form action="{{ upload_url }}" enctype="multipart/form-data" method="post">
+        <input name="action" type="hidden" value="update">
         <div><label>Import file:</label></div>
         <div><input type="file" name="osmdata"/></div>
         <p>You may use a zip compressed file.</p>
