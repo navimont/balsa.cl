@@ -1,0 +1,153 @@
+html, body, div, span, object, iframe, h1, h2, h3, h4, h5, h6, p, blockquote, pre, a, abbr, address, cite, code, del, dfn, em, img, ins, kbd, q, samp, small, strong, sub, sup, var, b, i, hr, dl, dt, dd, ol, ul, li, fieldset, form, label, legend, table, caption, tbody, tfoot, thead, tr, th, td, article, aside, canvas, details, figure, figcaption, hgroup, menu, footer, header, nav, section, summary, time, mark, audio, video {
+  margin-top: 0pt;
+  margin-right: 0pt;
+  margin-bottom: 0pt;
+  margin-left: 0pt;
+  padding-top: 0pt;
+  padding-right: 0pt;
+  padding-bottom: 0pt;
+  padding-left: 0pt;
+  border-top-width: 0pt;
+  border-right-width: 0pt;
+  border-bottom-width: 0pt;
+  border-left-width: 0pt;
+  border-top-style: none;
+  border-right-style: none;
+  border-bottom-style: none;
+  border-left-style: none;
+}
+article, aside, canvas, figure, figure img, figcaption, hgroup, footer, header, nav, section, audio, video {
+ display: block;
+}
+a img {
+ border: 0pt none;
+}
+.gigantic {
+  font-size: 68px;
+  line-height: 70px;
+  letter-spacing: -1px;
+}
+.huge, h1 {
+  font-size: 40px;
+  line-height: 42px;
+}
+.large, h2 {
+  font-size: 24px;
+  line-height: 30px;
+}
+.bigger, h3 {
+  font-size: 18px;
+  line-height: 24px;
+}
+.big, h4 {
+  font-size: 14px;
+  line-height: 16px;
+}
+body {
+  font-style: normal;
+  font-variant: normal;
+  font-weight: normal;
+  font-size: 17px;
+  line-height: 19px;
+  font-family: Palatino, Constantia, "Palatino Linotype", serif;
+  background-color: rgb(7, 7, 7);
+  color: rgb(255, 255, 255);
+}
+.small, small {
+  font-size: 12px;
+  line-height: 13px;
+}
+.error {
+  border-top-width: 2px;
+  border-right-width: 2px;
+  border-bottom-width: 2px;
+  border-left-width: 2px;
+  border-top-style: solid;
+  border-right-style: solid;
+  border-bottom-style: solid;
+  border-left-style: solid;
+  border-top-color: red;
+  border-right-color: red;
+  border-bottom-color: red;
+  border-left-color: red;
+  text-align: center;
+  width: 480px;
+}
+#balsa-logo {
+  font-size: 44pt;
+  color: rgb(255, 255, 255);
+  padding-bottom: 60px;
+}
+.balsa-text {
+  color: rgb(255, 255, 255);
+  font-size: 12pt;
+  font-family: Arial, Helvetica, sans-serif;
+}
+.balsa-link {
+  font-size: 18pt;
+  padding-bottom: 20px;
+  color: rgb(212, 224, 255);
+}
+.balsa-menu {
+  width: 330px;
+  padding-top: 30px;
+  float: left;
+}
+.balsa-pane {
+  padding-top: 0px;
+  padding-right: 0px;
+  padding-bottom: 0px;
+  padding-left: 360px;
+}
+#balsa-content {
+  padding-top: 10px;
+  padding-right: 30px;
+  padding-bottom: 0px;
+  padding-left: 30px;
+}
+#contact-heading {
+  padding-top: 30px;
+  padding-bottom: 10pt;
+}
+a {
+  color: rgb(212, 224, 255);
+}
+.balsa-menu a:link, article a:hover, article a:visited, header a:link, header a:hover, header a:visited {
+  color: rgb(212, 224, 255);
+  text-decoration: none;
+}
+#joboffer {
+  padding-top: 8pt;
+}
+LI {
+  padding-top: 4pt;
+  padding-left: 8pt;
+  margin-left: 12pt;
+}
+.balsa-table {
+  padding: 5px;
+  text-align: center;
+}
+.balsa-table-header {
+  background-color: rgb(111, 111, 111);
+  font-weight: bold;
+}
+.balsa-table-col-1 {
+  width: 180px;
+  background-color: rgb(111, 111, 111);
+  text-align: left;
+}
+.balsa-table-col {
+  width: 80px;
+  background-color: rgb(111, 111, 111);
+}
+.balsa-watch {
+  color: #990033;
+}
+.balsa-space {
+  padding-top: 1.2em;
+  padding-bottom: 0.5em;
+}
+.balsa-admin-background {
+  background-color: #260000;
+}
