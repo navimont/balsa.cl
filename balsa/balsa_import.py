@@ -6,9 +6,7 @@
 import settings
 import logging
 import os
-import yaml
-import zipfile
-import osmparse
+import datetime
 from django.utils import simplejson as json
 from google.appengine.ext import db
 from google.appengine.api import users
@@ -20,7 +18,7 @@ from google.appengine.api import taskqueue
 from google.appengine.api import memcache
 from google.appengine.ext import blobstore
 from google.appengine.ext.webapp import blobstore_handlers
-from balsa_dbm import Stop, GovName, StopMeta, GovMeta
+from balsa_dbm import Stop, StopMeta, Country, Region, Comuna
 from balsa_access import AdminRequired
 from balsa_stops import BalsaStopUploadHandler, BalsaStopStoreTask
 
@@ -66,9 +64,8 @@ class BalsaImportSelect(webapp.RequestHandler):
         # set counter fields to zero
         counter_fields = StopMeta()
         counter_fields.zero_all()
+        counter_fields.last_update = datetime.datetime(2011,1,1)
         counter_fields.put()
-        counter_gov = GovMeta(counter = 0)
-        counter_gov.put()
 
         template_values['upload_url'] = blobstore.create_upload_url('/import/upload')
 
