@@ -15,20 +15,24 @@ handlers:
   static_files: static/robots.txt
   upload: static/robots.txt
 
-- url: ((/_ah/login_required|/openid_login))
+- url: ((/login|/_ah/login_required|/openid_login))
   script: balsa_login.py
 
 - url: (/)
   script: balsa_main.py
 
-- url: (/import/store)
+- url: (/import.*)
   script: balsa_import.py
   login: admin
 
-- url: (/import.*)
+- url: (/purge|/purge/delete)
   script: balsa_import.py
-  login: required
+  login: admin
 
 - url: (/update.*)
   script: balsa_update.py
-  login: required
+  login: admin
+
+- url: (/lookup.*)
+  script: balsa_start.py
+
