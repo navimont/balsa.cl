@@ -1,55 +1,56 @@
 {% extends "base.html" %}
 
 {% block content %}
+  <div class="balsa-admin-background">
     {% for error in errors %}
         <div class="error">{{ error }}</div>
     {% endfor %}
     <title>Admin page - Update stops, stations & places</title>
 
     {% if import_status %}
-        <p>{{ import_status }}</p>
+        <p class="balsa-watch">{{ import_status }}</p>
     {% endif %}
     {% if update_status %}
-        <p>{{ update_status }}</p>
+        <p class="balsa-watch">{{ update_status }}</p>
     {% endif %}
 
     <header>
-      <h1>Data statistics<h1>
+      <h2 class="balsa-space">Data statistics<h2>
     </header>
 
     <article>
-        <table>
+        <table class="balsa-table">
             <tr>
                 <td></td>
-                <td>STOP</td>
-                <td>STATION</td>
-                <td>PLACE</td>
-                <td>Location zoom</td>
+                <td class='balsa-table balsa-table-header'>STOP</td>
+                <td class='balsa-table balsa-table-header'>STATION</td>
+                <td class='balsa-table balsa-table-header'>PLACE</td>
+                <td class='balsa-table balsa-table-header'>Location zoom</td>
             </tr>
             <tr>
-                <td>production data</td>
-                <td>{{production_num_stops}}</td>
-                <td>{{production_num_stations}}</td>
-                <td>{{production_num_places}}</td>
-                <td>{{gov_num}}</td>
+                <td class='balsa-table balsa-table-col-1'>production data</td>
+                <td class='balsa-table balsa-table-col'>{{production_num_stops}}</td>
+                <td class='balsa-table balsa-table-col'>{{production_num_stations}}</td>
+                <td class='balsa-table balsa-table-col'>{{production_num_places}}</td>
+                <td class='balsa-table balsa-table-col'>{{gov_num}}</td>
             </tr>
             <tr>
-                <td>updated (awaiting confirmation)</td>
-                <td>{{update_num_stops}}</td>
-                <td>{{update_num_stations}}</td>
-                <td>{{update_num_places}}</td>
-                <td>
+                <td class='balsa-table balsa-table-col-1'>updated (awaiting confirmation)</td>
+                <td class='balsa-table balsa-table-col'>{{update_num_stops}}</td>
+                <td class='balsa-table balsa-table-col'>{{update_num_stations}}</td>
+                <td class='balsa-table balsa-table-col'>{{update_num_places}}</td>
+                <td class='balsa-table balsa-table-col'>
                   <form action="/update/confirm/update" method="get">
                       <input class="button" type="submit" value="Confirm update"/>
                   </form>
                 </td>
             </tr>
             <tr>
-                <td>new or replaced (awaiting confirmation)</td>
-                <td>{{new_num_stops}}</td>
-                <td>{{new_num_stations}}</td>
-                <td>{{new_num_places}}</td>
-                <td>
+                <td class='balsa-table balsa-table-col-1'>new or replaced (awaiting confirmation)</td>
+                <td class='balsa-table balsa-table-col'>{{new_num_stops}}</td>
+                <td class='balsa-table balsa-table-col'>{{new_num_stations}}</td>
+                <td class='balsa-table balsa-table-col'>{{new_num_places}}</td>
+                <td class='balsa-table balsa-table-col'>
                   <form action="/update/confirm/new" method="get">
                       <input class="button" type="submit" value="Confirm additions"/>
                   </form>
@@ -60,7 +61,7 @@
     </article>
 
     <header>
-      <h1>Upload Openstreetmap data for import<h1>
+      <h2 class="balsa-space">Upload Openstreetmap data for update<h2>
     </header>
 
     <article>
@@ -73,4 +74,17 @@
         <div><input class="button" type="submit" value="load"/></div>
       </form>
     </article>
+
+
+    <header>
+      <h2 class="balsa-space">Purge database: Delete all datasets for stops, stations and places!<h2>
+    </header>
+
+    <article>
+      <form action="/purge" enctype="multipart/form-data" method="get">
+        <div><input class="button" type="submit" value="delete all"/></div>
+      </form>
+    </article>
+
+  </div>
 {% endblock %}

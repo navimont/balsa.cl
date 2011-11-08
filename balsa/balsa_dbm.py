@@ -42,6 +42,17 @@ class StopMeta(db.Model):
     counter_place_new_confirm = db.IntegerProperty()
     counter_place_update_confirm = db.IntegerProperty()
 
+    def zero_all(self):
+        self.counter_stop_no_confirm = 0
+        self.counter_stop_new_confirm = 0
+        self.counter_stop_update_confirm = 0
+        self.counter_station_no_confirm = 0
+        self.counter_station_new_confirm = 0
+        self.counter_station_update_confirm = 0
+        self.counter_place_no_confirm = 0
+        self.counter_place_new_confirm = 0
+        self.counter_place_update_confirm =0
+
 
 class Stop(GeoModel):
     """Lists bus stops, train halts, terminals, stations on ordinary

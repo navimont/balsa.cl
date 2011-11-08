@@ -21,16 +21,18 @@
     <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.5/jquery.min.js"></script>
   </head>
 
-  <body lang="en" id="full-map">
-    <div id="masthead">
-        <div id="balsa">
-            <h1><a href="/">Balsa.cl</a></h1>
-        </div>
+  <body lang="en" class="{{body_background_class}}">
+    <div id="balsa-content" checked="true">
+      <div class="balsa-menu">
+        <h1 id="balsa-logo"><a href="/">Balsa.cl</a></h1>
         <div id="loginout">
             <h4><a href="{{loginout_url}}">{{loginout_text}}</a></h4>
         </div>
-     </div>
-     {% block content %} {% endblock %}
+      </div>
+      <div class="balsa-pane">
+      {% block content %} {% endblock %}
+      </div>
+    </div>
   </body>
 </html>
 

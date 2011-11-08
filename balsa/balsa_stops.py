@@ -7,6 +7,7 @@
 import settings
 import logging
 import os
+import re
 import yaml
 import zipfile
 import osmparse
@@ -22,10 +23,34 @@ from google.appengine.api import memcache
 from google.appengine.ext import blobstore
 from google.appengine.ext.webapp import blobstore_handlers
 from balsa_dbm import Stop, GovName, StopMeta, GovMeta
-from balsa_tools import plainify
-from balsa_access import get_current_user_template_values
+from balsa_access import AdminRequired
 
 
+class Normalize(object):
+    """Normalize names with national characters to plain ascii"""
+
+    ignore = ['calle','avenida','avda','plaza','parada','de','del','la','lo','el','los']
+    word_pattern = re.compile(r"(\w+)", re.UNICODE)
+
+    @classmethod
+    def normalize(cls,string):
+        """Removes all accents and special characters form string and converts
+        string to lower case. If the string is made up of several words a list
+        of these words is returned.
+
+        Returns an array of plainified strings (splitted at space)
+        """
+        res = []
+        for s1 in re.findall(cls.word_pattern, string):
+            s1 = unicode(s1)
+            s1 = unicodedata.normalize('NFD',s1.lower())
+            s1 = s1.replace("`", "")
+            s1 = s1.encode('ascii','ignore')
+            s1 = s1.replace("~", "")
+            s1 = s1.strip()
+            if len(s1) > 1 and not s1 in cls.ignore:
+                res.append(s1)
+        return res
 
 class BalsaStopStoreTask(webapp.RequestHandler):
     """Background tasks parses osm data and stores stops, stations and places
@@ -66,9 +91,8 @@ class BalsaStopStoreTask(webapp.RequestHandler):
                 gov.append(v)
         stop.ascii_names = []
         for name in stop.names:
-            stop.ascii_names.extend(plainify(name))
-        for name in gov:
-            stop.ascii_names.extend(plainify(name))
+            if name != "<no name>":
+                stop.ascii_names.extend(Normalize.normalize(name))
         # get gov entity data for the adminstrative hierarchy we found
         stop.gov = BalsaStopStoreTask.gov_entity(gov)
         return stop
@@ -119,7 +143,6 @@ class BalsaStopStoreTask(webapp.RequestHandler):
             gov_key_name = ":".join(gov)
         gov_entity = GovName.get_by_key_name(gov_key_name, parent=cls._gov_meta)
         if not gov_entity:
-            logging.debug("No gov entry found for %s" % (gov_key_name))
             # update Counter
             cls._gov_meta.counter += 1
             gov_entity = GovName(parent=cls._gov_meta, key_name=gov_key_name)
@@ -148,40 +171,42 @@ class BalsaStopStoreTask(webapp.RequestHandler):
         for confirmation.
         """
         # look for existing node with the same osm_id
-        old_stop = Stop.all().filter("osm_id =", node.osm_id).get()
-        if old_stop and old_stop.confirm != 'NO':
-            # There is already an unconfirmed stop with the osm_id
-            # queued for confirmation. Overwrite it.
-            stop = BalsaStopStoreTask.update_stop(old_stop, node, kind)
-            stop.put()
-            logging.debug("REPLACE")
-            return
-        else:
-            # create stop entity from node data
-            stop = BalsaStopStoreTask.new_stop(node, kind)
-            if old_stop:
-                logging.debug("compare %s <==> %s" % (old_stop,stop))
-                if old_stop == stop:
-                    # no change
-                    logging.debug("no change")
-                    return
-                else:
-                    logging.debug("UPDATE")
-                    # accumulate some greater number in _stop_data for efficient batch write to datastore
-                    BalsaStopStoreTask.add(stop, confirm='UPDATE')
+        old_stop = None
+        for eq_stop in Stop.all().filter("osm_id =", node.osm_id):
+            old_stop = eq_stop
+            if eq_stop and eq_stop.confirm != 'NO':
+                # There is already an unconfirmed stop with the osm_id
+                # queued for confirmation. Overwrite it.
+                stop = BalsaStopStoreTask.update_stop(eq_stop, node, kind)
+                stop.put()
+                return
+        # create stop entity from node data
+        stop = BalsaStopStoreTask.new_stop(node, kind)
+        if old_stop:
+            logging.debug("compare %s <==> %s" % (old_stop,stop))
+            if old_stop == stop:
+                # no change
+                return
             else:
-                logging.debug("NEW")
-                BalsaStopStoreTask.add(stop, confirm='NEW')
+                # accumulate some greater number in _stop_data for efficient batch write to datastore
+                BalsaStopStoreTask.add(stop, confirm='UPDATE')
+        else:
+            BalsaStopStoreTask.add(stop, confirm='NEW')
 
-            return
+        return
 
     def post(self):
-        blob_info = blobstore.BlobInfo.get(self.request.get('osmdata'))
-        logging.info("Retrieved %d bytes for processing." % (blob_info.size))
-
         # import or upload?
         action = self.request.get('action')
         assert action, "Import or upload? No action specified."
+
+        blob_info = blobstore.BlobInfo.get(self.request.get('osmdata'))
+        if not blob_info:
+            logging.error("Could open parse uploaded file.")
+            memcache.set('%s_status' % action, "%s failed. Could not access data." % action.title(), time=30)
+            return
+
+        logging.info("Retrieved %d bytes for processing." % (blob_info.size))
 
         memcache.set('%s_status' % action, "Parsing %s data." % action, time=100)
 
@@ -221,12 +246,8 @@ class BalsaStopStoreTask(webapp.RequestHandler):
 class BalsaStopUploadHandler(blobstore_handlers.BlobstoreUploadHandler):
     """Is called when an osm data file has been uploaded to the blobstore"""
 
-    def post(self):
-        login_user = users.get_current_user()
-        if not users.is_current_user_admin():
-            logging.warning("User is not admin: %s" % (login_user))
-            self.error(500)
-            return
+    @AdminRequired
+    def post(self, login_user=None, template_values={}):
 
         memcache.set('import_status', "Queued import task", time=30)
 
@@ -254,6 +275,7 @@ class BalsaStopUploadHandler(blobstore_handlers.BlobstoreUploadHandler):
 
         # redirect to update page which will show the current state of the data storage
         self.redirect('/update')
+
 
 
 def main():

@@ -7,19 +7,19 @@
     <title>Admin page - Confirm new stops, stations & places</title>
 
     <article>
-        <table>
+        <table class="balsa-table">
             <tr>
                 <td></td>
-                <td>STOP</td>
-                <td>STATION</td>
-                <td>PLACE</td>
+                <td class='balsa-table balsa-table-header'>STOP</td>
+                <td class='balsa-table balsa-table-header'>STATION</td>
+                <td class='balsa-table balsa-table-header'>PLACE</td>
             </tr>
             <tr>
-                <td>New (awaiting confirmation)</td>
-                <td>{{new_num_stops}}</td>
-                <td>{{new_num_stations}}</td>
-                <td>{{new_num_places}}</td>
-                <td>
+                <td class='balsa-table balsa-table-col-1'>New (awaiting confirmation)</td>
+                <td class='balsa-table balsa-table-col'>{{new_num_stops}}</td>
+                <td class='balsa-table balsa-table-col'>{{new_num_stations}}</td>
+                <td class='balsa-table balsa-table-col'>{{new_num_places}}</td>
+                <td class='balsa-table balsa-table-col'>
                   <form action="/update/confirm/new" method="get">
                       <input type="hidden" name="offset" value="{{offset}}">
                       <input class="button" type="submit" value="Next"/>
@@ -30,24 +30,25 @@
     </article>
 
     <header>
-      <h1>Please check new stop:<h1>
+      <h2 class='balsa-space'>Please check new stop:<h2>
     </header>
 
     <article>
         <table>
-          <form action="/update/confirm/update/accept" method="get">
+          <form action="/update/confirm/new/accept" method="get">
             {% for stop in compare %}
               <tr>
-                <td>{{ stop.description }}</td>
-                <td>{{ stop.type }}</td>
-                <td>{{ stop.name }}</td>
-                <td>{{ stop.lat }}</td>
-                <td>{{ stop.lon }}</td>
-                <td>
+                <td class='balsa-table balsa-table-col {{stop.style}}'>{{ stop.description }}</td>
+                <td class='balsa-table balsa-table-col {{stop.style}}'>{{ stop.type }}</td>
+                <td class='balsa-table balsa-table-col-1 {{stop.style}}'>{{ stop.name }}</td>
+                <td class='balsa-table balsa-table-col {{stop.style}}'>{{ stop.lat }}</td>
+                <td class='balsa-table balsa-table-col {{stop.style}}'>{{ stop.lon }}</td>
+                <td class='balsa-table balsa-table-col {{stop.style}}'>
                   {% if stop.new %}
+                    <input type="hidden" name="accept" value="{{stop.key}}"/>
                     <input class="button" type="submit" value="Accept"/>
                   {% else %}
-                    <input type="checkbox" name="obsolete_key" value="{{stop.key}}">
+                    <input type="checkbox" name="obsolete_key" value="{{stop.key}}" {{stop.checked}}>
                     obsolete
                   {% endif %}
                 </td>
@@ -57,5 +58,5 @@
         </table>
     </article>
 
-    <p>Go back to <a href="/update">update page.</a></p>
+    <p class='balsa-space'>Go back to <a href="/update">update page.</a></p>
 {% endblock %}

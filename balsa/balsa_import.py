@@ -21,21 +21,40 @@ from google.appengine.api import memcache
 from google.appengine.ext import blobstore
 from google.appengine.ext.webapp import blobstore_handlers
 from balsa_dbm import Stop, GovName, StopMeta, GovMeta
-from balsa_tools import plainify
-from balsa_access import get_current_user_template_values
+from balsa_access import AdminRequired
 from balsa_stops import BalsaStopUploadHandler, BalsaStopStoreTask
+
+
+class BalsaPurgeTask(webapp.RequestHandler):
+    """Delete all data in the stop table"""
+
+    def post(self):
+        counter = StopMeta().all().get()
+        def delete():
+            db.delete(Stop.all().ancestor(counter))
+            counter.zero_all()
+            counter.put()
+        db.run_in_transaction(delete)
+        memcache.set('import_status', "Deletion finished.", time=30)
+
+
+class BalsaPurge(webapp.RequestHandler):
+    """Start a background job to delete all data in the stop table"""
+
+    @AdminRequired
+    def get(self, login_user=None, template_values={}):
+        # start background process
+        taskqueue.add(url='/purge/delete', queue_name='import')
+
+        memcache.set('import_status', "Deleting all data", time=30)
+        self.redirect('/update')
+
 
 class BalsaImportSelect(webapp.RequestHandler):
     """Bring up page to select file for import into database"""
 
-    def get(self):
-        login_user = users.get_current_user()
-        template_values = get_current_user_template_values (login_user)
-
-        if not users.is_current_user_admin():
-            logging.warning("Access to BalsaImportSelect failed. User is not admin: %s" % (login_user))
-            self.error(500)
-            return
+    @AdminRequired
+    def get(self, login_user=None, template_values={}):
 
         # Check for existing data. Import is only done with an empty database
         # Note: If an area is imported which has no intersection with the existing
@@ -45,15 +64,8 @@ class BalsaImportSelect(webapp.RequestHandler):
             self.redirect('/update')
 
         # set counter fields to zero
-        counter_fields = StopMeta(counter_stop_no_confirm = 0,
-                                  counter_stop_new_confirm = 0,
-                                  counter_stop_update_confirm = 0,
-                                  counter_station_no_confirm = 0,
-                                  counter_station_new_confirm = 0,
-                                  counter_station_update_confirm = 0,
-                                  counter_place_no_confirm = 0,
-                                  counter_place_new_confirm = 0,
-                                  counter_place_update_confirm = 0)
+        counter_fields = StopMeta()
+        counter_fields.zero_all()
         counter_fields.put()
         counter_gov = GovMeta(counter = 0)
         counter_gov.put()
@@ -66,6 +78,8 @@ class BalsaImportSelect(webapp.RequestHandler):
 
 
 application = webapp.WSGIApplication([('/import', BalsaImportSelect),
+                                      ('/purge', BalsaPurge),
+                                      ('/purge/delete', BalsaPurgeTask),
                                       ('/import/upload', BalsaStopUploadHandler),
                                       ('/import/store', BalsaStopStoreTask)],settings.DEBUG)
 

@@ -7,14 +7,14 @@
     <title>Admin page - Import stops, stations & places</title>
 
     <header>
-      <h1>Upload Openstreetmap data for import<h1>
+      <h2 class="balsa-space">Upload Openstreetmap data for import<h2>
     </header>
 
     <article>
       <!-- uploads file to blobstore -->
       <form action="{{ upload_url }}" enctype="multipart/form-data" method="post">
         <input name="action" type="hidden" value="import">
-        <div><label>Import file:</label></div>
+        <div><label class="balsa-space">Import file:</label></div>
         <div><input type="file" name="osmdata"/></div>
         <p>You may use a zip compressed file.</p>
         <div><input class="button" type="submit" value="load"/></div>
