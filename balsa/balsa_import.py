@@ -6,9 +6,7 @@
 import settings
 import logging
 import os
-import yaml
-import zipfile
-import osmparse
+import datetime
 from django.utils import simplejson as json
 from google.appengine.ext import db
 from google.appengine.api import users
@@ -20,7 +18,7 @@ from google.appengine.api import taskqueue
 from google.appengine.api import memcache
 from google.appengine.ext import blobstore
 from google.appengine.ext.webapp import blobstore_handlers
-from balsa_dbm import Stop, GovName, StopMeta, GovMeta
+from balsa_dbm import Stop, StopNew, StopUpdate, StopMeta, Country, Region, Comuna
 from balsa_access import AdminRequired
 from balsa_stops import BalsaStopUploadHandler, BalsaStopStoreTask
 
@@ -29,12 +27,31 @@ class BalsaPurgeTask(webapp.RequestHandler):
     """Delete all data in the stop table"""
 
     def post(self):
-        counter = StopMeta().all().get()
-        def delete():
-            db.delete(Stop.all().ancestor(counter))
-            counter.zero_all()
+        num = 0
+        for stop in settings.STOP_TYPES:
+            counter = StopMeta.get(Key.from_path('StopMeta', 1))
+            q = db.Query(Stop, keys_only=True).filter("stop_type =", stop).fetch(100)
+            logging.debug(q)
+            counter.counter_delta(-len(q), stop, "NO")
+            num += len(q)
+            db.delete(q)
+
+            q = db.Query(StopUpdate, keys_only=True).filter("stop_type =", stop).fetch(100)
+            logging.debug(q)
+            counter.counter_delta(-len(q), stop, "UPDATE")
+            num += len(q)
+            db.delete(q)
+
+            q = db.Query(StopNew, keys_only=True).filter("stop_type =", stop).fetch(100)
+            logging.debug(q)
+            counter.counter_delta(-len(q), stop, "NEW")
+            num += len(q)
+            db.delete(q)
             counter.put()
-        db.run_in_transaction(delete)
+
+        if num:
+            taskqueue.add(url='/purge/delete', queue_name='import')
+
         memcache.set('import_status', "Deletion finished.", time=30)
 
 
@@ -60,15 +77,17 @@ class BalsaImportSelect(webapp.RequestHandler):
         # Note: If an area is imported which has no intersection with the existing
         #       data it is a differrent matter. This will be handled in proper
         #       time. For the moment we concentrate on Chile.
-        if Stop.all().get():
+        if StopMeta.get(Key.from_path('StopMeta', 1)):
             self.redirect('/update')
 
         # set counter fields to zero
-        counter_fields = StopMeta()
-        counter_fields.zero_all()
-        counter_fields.put()
-        counter_gov = GovMeta(counter = 0)
-        counter_gov.put()
+        # counter_fields = StopMeta(Key.from_path('StopMeta', 1))
+        def store():
+            counter_fields = StopMeta(key=Key.from_path('StopMeta', 1))
+            counter_fields.zero_all()
+            counter_fields.last_update = datetime.datetime(2011,1,1)
+            counter_fields.put()
+        db.run_in_transaction(store)
 
         template_values['upload_url'] = blobstore.create_upload_url('/import/upload')
 

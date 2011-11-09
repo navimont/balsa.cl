@@ -8,10 +8,11 @@ import settings
 import logging
 import os
 import re
-import yaml
+import difflib
 import zipfile
 import osmparse
 import unicodedata
+import datetime
 from google.appengine.ext import db
 from google.appengine.api import users
 from google.appengine.ext import webapp
@@ -22,7 +23,7 @@ from google.appengine.api import taskqueue
 from google.appengine.api import memcache
 from google.appengine.ext import blobstore
 from google.appengine.ext.webapp import blobstore_handlers
-from balsa_dbm import Stop, GovName, StopMeta, GovMeta
+from balsa_dbm import Stop, StopMeta, Country, Region, Comuna
 from balsa_access import AdminRequired
 
 
@@ -52,28 +53,35 @@ class Normalize(object):
                 res.append(s1)
         return res
 
-class BalsaStopStoreTask(webapp.RequestHandler):
-    """Background tasks parses osm data and stores stops, stations and places
-    in the datastore.
+class BalsaStopFactory(object):
+    """Acts as a factory for Stop datasets
+
+    Has to be a static class because it is used from a static callback function
     """
 
-    # store the list stop entities to be written to the datastore
-    # in a batch operation
-    _stop_data = None
-    # Hold the stop counter dataset instance
-    _stop_meta = None
-    # Hold the giv data counter dataset instance
-    _gov_meta = None
-
     @classmethod
-    def new_stop(cls, node, kind):
-        """Returns stop in the correct entity group"""
-        stop = Stop(parent=cls._stop_meta, osm_id=node.osm_id, location=db.GeoPt(lat=node.lat, lon=node.lon))
+    def create_stop(cls, node, kind):
+        """Returns stop in production table created with parent to be in the correct entity group"""
+        stop = Stop(key=Key.from_path('Stop', node.osm_id), location=db.GeoPt(lat=node.lat, lon=node.lon))
         # uses the update function to fill all fields
-        return cls.update_stop(stop, node, kind)
+        return cls.fill_stop(stop, node, kind)
 
     @classmethod
-    def update_stop(cls, stop, node, kind):
+    def create_update_stop(cls, node, kind):
+        """Returns stop in update table created with parent to be in the correct entity group"""
+        stop = StopUpdate(key=Key.from_path('StopUpdate', node.osm_id), location=db.GeoPt(lat=node.lat, lon=node.lon))
+        # uses the update function to fill all fields
+        return cls.fill_stop(stop, node, kind)
+
+    @classmethod
+    def create_new_stop(cls, node, kind):
+        """Returns stop in update table created with parent to be in the correct entity group"""
+        stop = StopNew(key=Key.from_path('StopNew', node.osm_id), location=db.GeoPt(lat=node.lat, lon=node.lon))
+        # uses the update function to fill all fields
+        return cls.fill_stop(stop, node, kind)
+
+    @classmethod
+    def fill_stop(self, stop, node, kind):
         """Returns stop in the correct entity group"""
         stop.stop_type = kind
         stop.location = db.GeoPt(lat=node.lat, lon=node.lon)
@@ -87,80 +95,96 @@ class BalsaStopStoreTask(webapp.RequestHandler):
                 # language specific
                 stop.names.append(v)
             # adminstrative regions
-            if k.startswith('is_in:'):
-                gov.append(v)
+            if k.startswith('is_in:country'):
+                country = Country.get_or_insert(v, name=v, ascii_names=Normalize.normalize(v))
+                stop.country = country
+            if k.startswith('is_in:region') or k.startswith('is_in:state'):
+                # find the region with the best match (but must have some similarity to tag)
+                region_match = (0.6, "<no match>", "-")
+                for short_name,long_name in settings.REGIONS:
+                    ndiff = difflib.SequenceMatcher(None,long_name,v)
+                    if ndiff.ratio() > region_match[0]:
+                        region_match = (ndiff.ratio(), unicode(long_name), unicode(short_name))
+                if region_match[1] != "<no match>":
+                    logging.debug("Match %f for %s and %s" % region_match)
+                    region = Region.get_or_insert(region_match[2],
+                                                  name=region_match[1],
+                                                  short_name=region_match[2],
+                                                  ascii_names = Normalize.normalize("%s %s" % (long_name, short_name)))
+                    region.put()
+                    stop.region = region
+                else:
+                    logging.warning("Unknown region, state or Bundesland: %s" % v)
+            if k.startswith('is_in:city') or k.startswith('is_in:municipality'):
+                comuna = Comuna.get_or_insert(v, name=v, ascii_names=Normalize.normalize(v))
+                stop.comuna = comuna
         stop.ascii_names = []
         for name in stop.names:
             if name != "<no name>":
                 stop.ascii_names.extend(Normalize.normalize(name))
-        # get gov entity data for the adminstrative hierarchy we found
-        stop.gov = BalsaStopStoreTask.gov_entity(gov)
         return stop
 
-    @classmethod
-    def add(cls, stop, confirm='NO'):
-        if stop.stop_type == 'STOP' and confirm == 'NO':
-            cls._stop_meta.counter_stop_no_confirm += 1
-        elif stop.stop_type == 'STOP' and confirm == 'UPDATE':
-            cls._stop_meta.counter_stop_update_confirm += 1
-        elif stop.stop_type == 'STOP' and confirm == 'NEW':
-            cls._stop_meta.counter_stop_new_confirm += 1
-        elif stop.stop_type == 'PLACE' and confirm == 'NO':
-            cls._stop_meta.counter_place_no_confirm += 1
-        elif stop.stop_type == 'PLACE' and confirm == 'UPDATE':
-            cls._stop_meta.counter_place_update_confirm += 1
-        elif stop.stop_type == 'PLACE' and confirm == 'NEW':
-            cls._stop_meta.counter_place_new_confirm += 1
-        elif stop.stop_type == 'STATION' and confirm == 'NO':
-            cls._stop_meta.counter_station_no_confirm += 1
-        elif stop.stop_type == 'STATION' and confirm == 'UPDATE':
-            cls._stop_meta.counter_station_update_confirm += 1
-        elif stop.stop_type == 'STATION' and confirm == 'NEW':
-            cls._stop_meta.counter_station_new_confirm += 1
-        else:
-            assert False, "Invalid stop type or confirm %s/%s" % (stop.stop_type, confirm)
 
-        stop.confirm = confirm
+class BalsaStopWriter(object):
+    """Holds Stops which are imported for the first time
+
+    Takes care of batch wise write operations of stop data
+    to the database.
+    """
+    @classmethod
+    def init(cls):
+        # store the list stop entities to be written to the datastore
+        # in a batch operation
+        cls._stop_data = []
+        cls._timestamp = datetime.datetime(2001,1,1)
+
+    @classmethod
+    def add(cls, stop, timestamp):
+        if timestamp > cls._timestamp:
+            cls._timestamp = timestamp
         cls._stop_data.append(stop)
         # write a batch if a certain quantity has accumulated
         if len(cls._stop_data) % settings.BATCH_SIZE == 0:
-            # store fields and counters together in transaction
-            db.run_in_transaction(cls.store)
+            cls.store()
 
     @classmethod
     def store(cls):
-        """Store data in transaction"""
+        """Store datasets accumulated in internal list"""
         db.put(cls._stop_data)
-        db.put(cls._stop_meta)
+        db.run_in_transaction(cls.update_counter)
         cls._stop_data = []
 
     @classmethod
-    def gov_entity(cls,gov):
-        """Store new government entity or return existing one"""
-        if not gov:
-            gov_key_name = '<no gov>'
-        else:
-            gov_key_name = ":".join(gov)
-        gov_entity = GovName.get_by_key_name(gov_key_name, parent=cls._gov_meta)
-        if not gov_entity:
-            # update Counter
-            cls._gov_meta.counter += 1
-            gov_entity = GovName(parent=cls._gov_meta, key_name=gov_key_name)
-            gov_entity.gov_names = gov
-            def gov_store():
-                gov_entity.put()
-                cls._gov_meta.put()
-            db.run_in_transaction(gov_store)
+    def update_counter(cls):
+        """Update meta counter fields in transaction"""
+        counter = StopMeta.get(Key.from_path('StopMeta', 1))
+        for stop in cls._stop_data:
+            if isinstance(stop, Stop):
+                counter.counter_delta(1, stop.stop_type, "NO")
+            elif isinstance(stop, StopUpdate):
+                counter.counter_delta(1, stop.stop_type, "UPDATE")
+            elif isinstance(stop, StopNew):
+                counter.counter_delta(1, stop.stop_type, "NEW")
+            else:
+                assert False, "Unknown stop instance: %s" % (stop)
+            if cls._timestamp > counter.last_update:
+                counter.last_update = cls._timestamp
+            counter.put()
 
-        return gov_entity
-
+class BalsaStopStoreTask(webapp.RequestHandler):
+    """Background tasks parses osm data and stores stops, stations and places
+    in the datastore.
+    """
     @staticmethod
     def import_node_cb(node, kind):
-        """Callback function processes nodes from osm data"""
-        stop = BalsaStopStoreTask.new_stop(node, kind)
+        # we don't consider stops for the moment
+        if kind == 'STOP':
+            return
 
-        # accumulate some greater number in _stop_data for efficient batch write to datastore
-        BalsaStopStoreTask.add(stop, confirm='NO')
+        """Callback function processes nodes from osm data"""
+        stop = BalsaStopFactory.create_stop(node, kind)
+        # accumulate some greater number in for efficient batch write to datastore
+        BalsaStopWriter.add(stop, node.timestamp)
 
     @staticmethod
     def update_node_cb(node, kind):
@@ -171,28 +195,21 @@ class BalsaStopStoreTask(webapp.RequestHandler):
         for confirmation.
         """
         # look for existing node with the same osm_id
-        old_stop = None
-        for eq_stop in Stop.all().filter("osm_id =", node.osm_id):
-            old_stop = eq_stop
-            if eq_stop and eq_stop.confirm != 'NO':
-                # There is already an unconfirmed stop with the osm_id
-                # queued for confirmation. Overwrite it.
-                stop = BalsaStopStoreTask.update_stop(eq_stop, node, kind)
-                stop.put()
-                return
-        # create stop entity from node data
-        stop = BalsaStopStoreTask.new_stop(node, kind)
+        old_stop = Stop.get_by_key_id(node.osm_id)
         if old_stop:
+            # create stop entity from node data
+            stop = BalsaStopStoreTask.create_update_stop(node, kind)
             logging.debug("compare %s <==> %s" % (old_stop,stop))
             if old_stop == stop:
                 # no change
                 return
             else:
-                # accumulate some greater number in _stop_data for efficient batch write to datastore
-                BalsaStopStoreTask.add(stop, confirm='UPDATE')
+                # accumulate some greater number for efficient batch write to datastore
+                BalsaStopWriter.add(stop, node.timestamp)
         else:
-            BalsaStopStoreTask.add(stop, confirm='NEW')
-
+            # create stop entity from node data
+            stop = BalsaStopStoreTask.create_new_stop(node, kind)
+            BalsaStopWriter.add(stop, node.timestamp)
         return
 
     def post(self):
@@ -221,9 +238,8 @@ class BalsaStopStoreTask(webapp.RequestHandler):
         else:
             file_reader = blob_reader
 
-        BalsaStopStoreTask._stop_data = []
-        BalsaStopStoreTask._stop_meta = StopMeta.all().get()
-        BalsaStopStoreTask._gov_meta = GovMeta.all().get()
+        # initialize the writer class for stop objects
+        BalsaStopWriter.init()
 
         # parse blob and call node_cb on discovery of a Place, Stop or Station
         try:
@@ -233,7 +249,7 @@ class BalsaStopStoreTask(webapp.RequestHandler):
                 osmparse.OSMContentHandler(file_reader, (osmparse.StopAttr, BalsaStopStoreTask.update_node_cb))
 
             # store fields and counters together in transaction
-            db.run_in_transaction(BalsaStopStoreTask.store)
+            BalsaStopWriter.store
             memcache.set('%s_status' % action, "%s finished successfully." % action.title(), time=30)
 
         except SyntaxError:

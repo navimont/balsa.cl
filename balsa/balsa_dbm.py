@@ -11,27 +11,13 @@ from geo.geomodel import GeoModel
 import settings
 
 
-
-class GovMeta(db.Model):
-    """Keep number of Gov entries"""
-    counter = db.IntegerProperty()
-
-class GovName(db.Model):
-    """Hold a list of adminstrative entities. Example: Region Metropolitana, Chile"""
-
-    # in unicode
-    gov_names = db.StringListProperty()
-
-    def __str__(self):
-        return "<%s> %s" % (self.__class__,", ".join(self.gov_names))
-
 class StopMeta(db.Model):
     """Keep track of number of datasets stored
 
     Should contain 9 datasets, the permutations of stops
     STOP, STATION, PLACE with confirmation NO, UPDATE and NEW
     """
-
+    last_update = db.DateTimeProperty()
     counter_stop_no_confirm = db.IntegerProperty()
     counter_stop_new_confirm = db.IntegerProperty()
     counter_stop_update_confirm = db.IntegerProperty()
@@ -53,6 +39,56 @@ class StopMeta(db.Model):
         self.counter_place_new_confirm = 0
         self.counter_place_update_confirm =0
 
+    def counter_delta(self, delta, stop_type, confirm="NO"):
+        if stop_type == 'STOP' and confirm == 'NO':
+            self.counter_stop_no_confirm += delta
+        elif stop_type == 'STOP' and confirm == 'UPDATE':
+            self.counter_stop_update_confirm += delta
+        elif stop_type == 'STOP' and confirm == 'NEW':
+            self.counter_stop_new_confirm += delta
+        elif stop_type == 'PLACE' and confirm == 'NO':
+            self.counter_place_no_confirm += delta
+        elif stop_type == 'PLACE' and confirm == 'UPDATE':
+            self.counter_place_update_confirm += delta
+        elif stop_type == 'PLACE' and confirm == 'NEW':
+            self.counter_place_new_confirm += delta
+        elif stop_type == 'STATION' and confirm == 'NO':
+            self.counter_station_no_confirm += delta
+        elif stop_type == 'STATION' and confirm == 'UPDATE':
+            self.counter_station_update_confirm += delta
+        elif stop_type == 'STATION' and confirm == 'NEW':
+            self.counter_station_new_confirm += delta
+        else:
+            assert False, "Invalid stop type or confirm %s/%s" % (stop_type, confirm)
+
+
+class Comuna(db.Model):
+    """Comunas (Staedte, towns, municipalities)
+
+    from tag is_in:city or is_in:municipality
+    """
+    name = db.StringProperty()
+    ascii_names = db.StringListProperty()
+
+class Region(db.Model):
+    """Regions (States, Bundeslaender)
+
+    from tag is_in:region or is_in:state
+    """
+    # Short name is the roman number (Chile), the state signature (USA)
+    # or some funny Abkuerzung (Germany))
+    short_name = db.StringProperty()
+    name = db.StringProperty()
+    # both long and short name
+    ascii_names = db.StringListProperty()
+
+class Country(db.Model):
+    """Countries of the world
+
+    from tag is_in:country
+    """
+    name = db.StringProperty()
+    ascii_names = db.StringListProperty()
 
 class Stop(GeoModel):
     """Lists bus stops, train halts, terminals, stations on ordinary
@@ -67,19 +103,17 @@ class Stop(GeoModel):
 
     # List of names for this stop, in unicode
     names = db.StringListProperty()
-    # alt name (same as above and more but in pure ascii)
+    # alt name (same as above but in pure ascii)
     ascii_names = db.StringListProperty()
-    # openstreetmap node id
-    osm_id = db.IntegerProperty(required=True)
     # type of Stop
     stop_type = db.StringProperty(choices=settings.STOP_TYPES)
     # administrative hierarchy
-    gov = db.ReferenceProperty(GovName, collection_name="stops")
-    #  field marks data sets which need to be confirmed as updated or new
-    confirm = db.StringProperty(choices=settings.CONFIRM_TYPES)
+    comuna = db.ReferenceProperty(Comuna)
+    region = db.ReferenceProperty(Region)
+    country = db.ReferenceProperty(Country)
 
     def __str__(self):
-        return "<Stop> id=%d %s (lat=%3.3f,lon=%3.3f)" % (self.osm_id, " ".join(self.names),self.location.lat,self.location.lon)
+        return "<Stop> id=%d %s (lat=%3.3f,lon=%3.3f)" % ("; ".join(self.names),self.location.lat,self.location.lon)
 
     def __eq__(self,other):
         if not other or not isinstance(other, self.__class__):
@@ -88,4 +122,17 @@ class Stop(GeoModel):
         if self.osm_id == other.osm_id and self.names == other.names and self.stop_type == other.stop_type and self.location == other.location:
             return True
         return False
+
+class StopUpdate(Stop):
+    """Holds changed Stops which need to be confirmed by adminstrator before being moved into the Stop datastore
+    """
+    def __str__(self):
+        return "<StopUpdate> id=%d %s (lat=%3.3f,lon=%3.3f)" % ("; ".join(self.names),self.location.lat,self.location.lon)
+
+
+class StopNew(Stop):
+    """Holds new Stops which need to be confirmed by adminstrator before being moved into the Stop datastore
+    """
+    def __str__(self):
+        return "<StopUpdate> id=%d %s (lat=%3.3f,lon=%3.3f)" % ("; ".join(self.names),self.location.lat,self.location.lon)
 

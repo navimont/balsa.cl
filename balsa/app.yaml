@@ -21,7 +21,10 @@ handlers:
 - url: (/)
   script: balsa_main.py
 
-- url: (/import.*)
+- url: (/lookup)
+  script: balsa_start.py
+
+- url: (/import/store|/purge|/purge/delete)
   script: balsa_import.py
   login: admin
 

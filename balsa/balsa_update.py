@@ -6,9 +6,7 @@
 import settings
 import logging
 import os
-import yaml
 import zipfile
-import osmparse
 import difflib
 import geo.geomath
 import geo.geomodel
@@ -23,7 +21,7 @@ from google.appengine.api import taskqueue
 from google.appengine.api import memcache
 from google.appengine.ext import blobstore
 from google.appengine.ext.webapp import blobstore_handlers
-from balsa_dbm import Stop, GovName, StopMeta, GovMeta
+from balsa_dbm import Stop, StopMeta, Country, Region, Comuna
 from balsa_access import AdminRequired
 from balsa_stops import BalsaStopStoreTask, BalsaStopUploadHandler
 
@@ -39,7 +37,7 @@ class BalsaUpdate(webapp.RequestHandler):
 
         # Check for existing data.
         try:
-            counter = StopMeta.all().get()
+            counter = StopMeta.get(Key.from_path('StopMeta', 1))
             template_values['production_num_stops'] = counter.counter_stop_no_confirm
             template_values['production_num_stations'] = counter.counter_station_no_confirm
             template_values['production_num_places'] = counter.counter_place_no_confirm
@@ -51,7 +49,7 @@ class BalsaUpdate(webapp.RequestHandler):
             template_values['new_num_stations'] = counter.counter_station_new_confirm
             template_values['new_num_places'] = counter.counter_place_new_confirm
             # Administrative hierarchy
-            template_values['gov_num'] = GovMeta.all().get().counter
+            template_values['gov_num'] = Comuna.all().count()+Region.all().count()+Country.all().count()
         except AttributeError:
             # no data in database. Redirect to import page
             self.redirect('/import')
@@ -159,21 +157,9 @@ class BalsaConfirmNewAccept(webapp.RequestHandler):
         def store():
             for key in obsolete:
                 stop = Stop.all().ancestor(counter).filter("__key__ =", Key(key)).get()
-                if stop.stop_type == 'STOP':
-                    counter.counter_stop_no_confirm -= 1
-                elif stop.stop_type == 'STATION':
-                    counter.counter_station_no_confirm -= 1
-                elif stop.stop_type == 'PLACE':
-                    counter.counter_place_no_confirm -= 1
-            if new_stop.stop_type == 'STOP':
-                counter.counter_stop_no_confirm += 1
-                counter.counter_stop_new_confirm -= 1
-            elif new_stop.stop_type == 'STATION':
-                counter.counter_station_no_confirm += 1
-                counter.counter_station_new_confirm -= 1
-            elif new_stop.stop_type == 'PLACE':
-                counter.counter_place_no_confirm += 1
-                counter.counter_place_new_confirm -= 1
+                counter.counter_delta(-1, stop.stop_type)
+            counter.counter_delta(1, stop.stop_type)
+            counter.counter_delta(-1, stop.stop_type, "NEW")
             db.put(new_stop)
             db.delete(obsolete)
             counter.put()
@@ -197,12 +183,7 @@ class BalsaConfirmUpdateAccept(webapp.RequestHandler):
             # remove updated data set
             old_stop = Stop.all().ancestor(counter).filter("osm_id =", stop.osm_id).filter('confirm =', 'NO').get()
             assert old_stop, "Did not find original data for update"
-            if stop.stop_type == 'STOP':
-                counter.counter_stop_update_confirm -= 1
-            elif stop.stop_type == 'STATION':
-                counter.counter_station_update_confirm -= 1
-            elif stop.stop_type == 'PLACE':
-                counter.counter_place_update_confirm -= 1
+            counter.counter_delta(-1, stop.stop_type, "UPDATE")
             counter.put()
             stop.put()
             old_stop.delete()
@@ -222,12 +203,7 @@ class BalsaConfirmUpdateReject(webapp.RequestHandler):
         counter = StopMeta().all().get()
         def store():
             stop = Stop.get(key)
-            if stop.stop_type == 'STOP':
-                counter.counter_stop_update_confirm -= 1
-            elif stop.stop_type == 'STATION':
-                counter.counter_station_update_confirm -= 1
-            elif stop.stop_type == 'PLACE':
-                counter.counter_place_update_confirm -= 1
+            counter.counter_delta(-1, stop.stop_type, "UPDATE")
             counter.put()
             stop.delete()
         db.run_in_transaction(store)
