@@ -62,21 +62,21 @@ class BalsaStopFactory(object):
     @classmethod
     def create_stop(cls, node, kind):
         """Returns stop in production table created with parent to be in the correct entity group"""
-        stop = Stop(key_id=node.osm_id, location=db.GeoPt(lat=node.lat, lon=node.lon))
+        stop = Stop(key=Key.from_path('Stop', node.osm_id), location=db.GeoPt(lat=node.lat, lon=node.lon))
         # uses the update function to fill all fields
         return cls.fill_stop(stop, node, kind)
 
     @classmethod
     def create_update_stop(cls, node, kind):
         """Returns stop in update table created with parent to be in the correct entity group"""
-        stop = StopUpdate(key_id=node.osm_id, location=db.GeoPt(lat=node.lat, lon=node.lon))
+        stop = StopUpdate(key=Key.from_path('StopUpdate', node.osm_id), location=db.GeoPt(lat=node.lat, lon=node.lon))
         # uses the update function to fill all fields
         return cls.fill_stop(stop, node, kind)
 
     @classmethod
     def create_new_stop(cls, node, kind):
         """Returns stop in update table created with parent to be in the correct entity group"""
-        stop = StopNew(key_id=node.osm_id, location=db.GeoPt(lat=node.lat, lon=node.lon))
+        stop = StopNew(key=Key.from_path('StopNew', node.osm_id), location=db.GeoPt(lat=node.lat, lon=node.lon))
         # uses the update function to fill all fields
         return cls.fill_stop(stop, node, kind)
 
@@ -96,27 +96,27 @@ class BalsaStopFactory(object):
                 stop.names.append(v)
             # adminstrative regions
             if k.startswith('is_in:country'):
-                country = Country.get_or_insert(key_name=v, name=v)
+                country = Country.get_or_insert(v, name=v, ascii_names=Normalize.normalize(v))
                 stop.country = country
             if k.startswith('is_in:region') or k.startswith('is_in:state'):
-                region = Region.get_by_key_name(v)
-                if not region:
-                    # find the region with the best match (but must have some similarity to tag)
-                    region_match = (0.6, "<no match>", "-")
-                    for short_name,long_name in settings.REGIONS:
-                        ndiff = difflib.SequenceMatcher(None,long_name,v)
-                        if ndiff.ratio() > region_match[0]:
-                            region_match = (ndiff.ratio(), unicode(long_name), unicode(short_name))
-                    if region_match[1] != "<no match>":
-                        logging.debug("Match %f for %s and %s" % region_match)
-                        region = Region.get_or_insert(key_name=long_name, name=long_name, short_name=short_name)
-                        region.put()
-                if not region:
-                    logging.warning("Unknown region, state or Bundesland: %s" % v)
-                else:
+                # find the region with the best match (but must have some similarity to tag)
+                region_match = (0.6, "<no match>", "-")
+                for short_name,long_name in settings.REGIONS:
+                    ndiff = difflib.SequenceMatcher(None,long_name,v)
+                    if ndiff.ratio() > region_match[0]:
+                        region_match = (ndiff.ratio(), unicode(long_name), unicode(short_name))
+                if region_match[1] != "<no match>":
+                    logging.debug("Match %f for %s and %s" % region_match)
+                    region = Region.get_or_insert(region_match[2],
+                                                  name=region_match[1],
+                                                  short_name=region_match[2],
+                                                  ascii_names = Normalize.normalize("%s %s" % (long_name, short_name)))
+                    region.put()
                     stop.region = region
+                else:
+                    logging.warning("Unknown region, state or Bundesland: %s" % v)
             if k.startswith('is_in:city') or k.startswith('is_in:municipality'):
-                comuna = Comuna.get_or_insert(key_name=v, name=v)
+                comuna = Comuna.get_or_insert(v, name=v, ascii_names=Normalize.normalize(v))
                 stop.comuna = comuna
         stop.ascii_names = []
         for name in stop.names:

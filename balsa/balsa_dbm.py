@@ -68,6 +68,7 @@ class Comuna(db.Model):
     from tag is_in:city or is_in:municipality
     """
     name = db.StringProperty()
+    ascii_names = db.StringListProperty()
 
 class Region(db.Model):
     """Regions (States, Bundeslaender)
@@ -78,6 +79,8 @@ class Region(db.Model):
     # or some funny Abkuerzung (Germany))
     short_name = db.StringProperty()
     name = db.StringProperty()
+    # both long and short name
+    ascii_names = db.StringListProperty()
 
 class Country(db.Model):
     """Countries of the world
@@ -85,7 +88,7 @@ class Country(db.Model):
     from tag is_in:country
     """
     name = db.StringProperty()
-
+    ascii_names = db.StringListProperty()
 
 class Stop(GeoModel):
     """Lists bus stops, train halts, terminals, stations on ordinary
@@ -107,7 +110,7 @@ class Stop(GeoModel):
     # administrative hierarchy
     comuna = db.ReferenceProperty(Comuna)
     region = db.ReferenceProperty(Region)
-    pais = db.ReferenceProperty(Country)
+    country = db.ReferenceProperty(Country)
 
     def __str__(self):
         return "<Stop> id=%d %s (lat=%3.3f,lon=%3.3f)" % ("; ".join(self.names),self.location.lat,self.location.lon)
