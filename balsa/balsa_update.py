@@ -37,7 +37,7 @@ class BalsaUpdate(webapp.RequestHandler):
 
         # Check for existing data.
         try:
-            counter = StopMeta.all().get()
+            counter = StopMeta.get(Key.from_path('StopMeta', 1))
             template_values['production_num_stops'] = counter.counter_stop_no_confirm
             template_values['production_num_stations'] = counter.counter_station_no_confirm
             template_values['production_num_places'] = counter.counter_place_no_confirm
@@ -49,7 +49,7 @@ class BalsaUpdate(webapp.RequestHandler):
             template_values['new_num_stations'] = counter.counter_station_new_confirm
             template_values['new_num_places'] = counter.counter_place_new_confirm
             # Administrative hierarchy
-            template_values['gov_num'] = Comuna.all().counter()
+            template_values['gov_num'] = Comuna.all().count()+Region.all().count()+Country.all().count()
         except AttributeError:
             # no data in database. Redirect to import page
             self.redirect('/import')

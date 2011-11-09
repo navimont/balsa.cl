@@ -6,6 +6,7 @@ import os
 import sys
 import xml.sax
 import logging
+import datetime
 
 try:
     from settings import LOG_LEVEL
@@ -31,12 +32,13 @@ StopAttr = {'place': [('city','PLACE'),
             }
 
 class Node(object):
-    def __init__(self,osm_id,name,lat,lon):
+    def __init__(self,osm_id,name,lat,lon,timestamp):
         self.osm_id = osm_id
         self.name = name
         self.lat = lat
         self.lon = lon
         self.attr = {}
+        self.timestamp = datetime.datetime(int(timestamp[0:4]),int(timestamp[5:7]),int(timestamp[8:10]),int(timestamp[11:13]),int(timestamp[14:16]),int(timestamp[17:19]),0,None)
 
     def __str__(self):
         return "NODE %s (%3.3f, %3.3f)" % (self.name.encode("UTF-8") ,self.lat,self.lon)
@@ -72,7 +74,8 @@ class OSMContentHandler(xml.sax.ContentHandler):
             # In the end, decide whether it is written to storage
             self._current_node = Node(long(attrs['id']), "<no name>",
                             float(attrs['lat']),
-                            float(attrs['lon']))
+                            float(attrs['lon']),
+                            attrs['timestamp'])
 
         elif name == 'way':
             pass

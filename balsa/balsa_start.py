@@ -31,7 +31,7 @@ class LookupStop(webapp.RequestHandler):
             self.response.out.write("{}")
             return
 
-        logging.debug("lookup_contacts searches for %s" % " ".join(queries))
+        logging.debug("lookup stops for %s" % " ".join(queries))
 
         all_stops = []
         for query in queries:
@@ -42,7 +42,6 @@ class LookupStop(webapp.RequestHandler):
             q_pk = db.Query(Stop, keys_only=True)
             q_pk.filter("ascii_names >=", query0)
             q_pk.filter("ascii_names <", query1)
-            q_pk.filter("confirm =", 'NO')
             for key in q_pk:
                 # insert stop key
                 stops.append(key)

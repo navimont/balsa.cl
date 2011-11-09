@@ -39,7 +39,7 @@ class StopMeta(db.Model):
         self.counter_place_new_confirm = 0
         self.counter_place_update_confirm =0
 
-    def counter_delta(delta, stop_type, confirm="NO"):
+    def counter_delta(self, delta, stop_type, confirm="NO"):
         if stop_type == 'STOP' and confirm == 'NO':
             self.counter_stop_no_confirm += delta
         elif stop_type == 'STOP' and confirm == 'UPDATE':
