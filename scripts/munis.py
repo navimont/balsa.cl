@@ -4,6 +4,9 @@ import sys
 import xml.sax
 import json
 import unicodedata
+import inspect
+import lib.osmmath
+import lib.euclid
 
 # contains Nodes organized by osm_id
 Nodes={}
@@ -39,7 +42,7 @@ class Box(object):
         if self.east == 180 or lon > self.east:
             self.east = lon
 
-    def is_in(self,node):
+    def coordinates_in_box(self,node):
         """Is coordinate point in bounding box"""
         lat,lon = node
         if lat < self.north and lat > self.south and lon > self.west and lon < self.east:
@@ -62,15 +65,134 @@ class Boundary(object):
         self.nodes = []
         # set to True if not all relation elements were found for resolving
         self.incomplete = False
+        # outline segments from node to node as vectors
+        self.segments = []
+        # merkator transformation object, initialized with first node
+        self.merkator = None
 
     def add_node(self,node):
         """receive (lat,lon) tuple"""
         self.nodes.append(node)
         # update bounding box
         self.bbox.include_node(node)
+        # initialize projection with first node
+        if not self.merkator:
+            self.merkator = lib.osmmath.Merkator(node)
+
+    def calculate_segments(self):
+        """Calculates outline segments from pairs of nodes"""
+        self.segments=[]
+        nn = len(self.nodes)
+        for i in range(nn):
+            p0 = self.merkator.getXY(self.nodes[i])
+            p1 = self.merkator.getXY(self.nodes[(i+1)%nn])
+            if p0 == p1:
+                # happens at the common points of two ways
+                continue
+            # and in euclid format
+            p0 = lib.euclid.Point2(p0[0], p0[1])
+            p1 = lib.euclid.Point2(p1[0], p1[1])
+            self.segments.append(lib.euclid.LineSegment2(p0,p1))
+
+    def coordinates_in_boundary(self, coord):
+        """Return True if point is in boundary polygon, False otherwise"""
+        # construct a ray starting from the point
+        point = self.merkator.getXY(coord)
+        ray = lib.euclid.Ray2(lib.euclid.Point2(point[0],point[1]),lib.euclid.Vector2(1,1))
+        # count the ray's intersections with boundary segments
+        count = 0
+        for segment in self.segments:
+            if ray.intersect(segment):
+                count += 1
+        if count & 1:
+            # if the number of intersections is odd, then the point is inside
+            return True
+        return False
 
     def __str__(self):
         return "Level %d Boundary %s (%d nodes) %s %s" % (self.level, self.name, len(self.nodes), "INCOMPLETE" if self.incomplete else "", str(self.bbox))
+
+
+class BoundaryContainer():
+    """Hold the parsed boundaries separated by level and provide methods to work with them"""
+
+    def __init__(self):
+        # holds lists of Boundary objects mapped by their level
+        self.bnds = {}
+        self.statistics = {}
+        for i in range(10):
+            self.statistics[i] = {'match': 0, 'no_match': 0, 'multiple_match': 0}
+
+    def print_statistics(self, stream):
+        """Print some data on admin tagging"""
+        for i in range(10):
+            counter = 0
+            counter += self.statistics[i]['match']
+            counter += self.statistics[i]['no_match']
+            counter += self.statistics[i]['multiple_match']
+            if counter:
+                print >> stream, "Level-%d location tagging: " % (i)
+                print >> stream, "%4d ok" % (self.statistics[i]['match'])
+                print >> stream, "%4d no match" % (self.statistics[i]['no_match'])
+                print >> stream, "%4d multiple matches" % (self.statistics[i]['multiple_match'])
+
+
+    def add(self, bdy):
+        """Add boundary object to container"""
+        # check if the boundary object looks valid (minimum three nodes!)
+        if len(bdy.nodes) < 3:
+            return
+
+        # calculate segments of boundary object on the occasion
+        bdy.calculate_segments()
+        if bdy.level in self.bnds:
+            self.bnds[bdy.level].append(bdy)
+        else:
+            self.bnds[bdy.level] = [bdy]
+
+    def get_entity_by_level(self,level,lat,lon):
+        """Return name of administrative entity of given level in which the coordinates are located"""
+        # Quick approach: Look for a unique match in bounding boxes
+        box_match = []
+        for bdy in self.bnds[level]:
+            if bdy.bbox.coordinates_in_box((lat,lon)):
+                box_match.append(bdy)
+        # zero, one or multiple matches?
+        if not box_match:
+            return None
+            self.statistics[level]['no_match'] += 1
+        elif len(box_match) == 1:
+            return box_match[0].name
+            self.statistics[level]['match'] += 1
+        else:
+            poly_match = []
+            for match in box_match:
+                # verify with more precise point in polygon check
+                if match.coordinates_in_boundary((lat,lon)):
+                    poly_match.append(match)
+            # Again: zero, one or multiple matches?
+            if not poly_match:
+                self.statistics[level]['no_match'] += 1
+                return None
+            elif len(poly_match) == 1:
+                self.statistics[level]['match'] += 1
+                return poly_match[0].name
+            else:
+                self.statistics[level]['multiple_match'] += 1
+        return None
+
+    def get_muni(self,lat,lon):
+        """Return municipality name where the position is located"""
+        return self.get_entity_by_level(8,lat,lon)
+
+    def get_region(self,lat,lon):
+        """Return region name where the position is located"""
+        return self.get_entity_by_level(4,lat,lon)
+
+    def get_country(self,lat,lon):
+        """Return country name where the position is located"""
+        return self.get_entity_by_level(2,lat,lon)
+
 
 class Node(object):
     def __init__(self,osm_id,lat,lon):
@@ -106,20 +228,25 @@ class Relation(object):
 class OSMXMLNodeParser(xml.sax.ContentHandler):
     """Parses the file, enriches it with location information and writes it to stdout immediately"""
 
-    def __init__(self):
+    def __init__(self,bdy_container):
         self.node = None
         self.writer = xml.sax.saxutils.XMLGenerator(sys.stdout, "UTF-8")
         self.writer.startDocument()
+        self._bdy_container = bdy_container
         attr_vals = {
             u'version': "0.6",
             u'generator': u"Balsa.cl AdminBoundary enrichment"
             }
         attrs = xml.sax.xmlreader.AttributesImpl(attr_vals)
         self.writer.startElement(u'osm', attrs)
+        self.counter = 0
 
-    def cleanup():
-        """Write everything and close the ports"""
+    def cleanup(self):
+        """Finish up writing"""
         self.writer.endDocument()
+
+    def print_statistics(self,stream):
+        print >> stream, "%8d Nodes checked in target file" % (self.counter)
 
     def startElement(self, name, attrs):
         if name == 'node':
@@ -128,11 +255,21 @@ class OSMXMLNodeParser(xml.sax.ContentHandler):
             # elements with name will get a geolocation in their adminstrative boundaries here
             if self.node:
                 if attrs['k'] == 'name':
-                    region = get_region(self.node.lat, self.node.lon)
+                    self.counter += 1
+                    my_attrs = {}
+                    my_attrs.update(attrs)
+                    muni = self._bdy_container.get_muni(self.node.lat, self.node.lon)
+                    if muni:
+                        my_attrs['is_in:municipality'] = muni
+                    region = self._bdy_container.get_region(self.node.lat, self.node.lon)
                     if region:
-                        attrs['is_in:region'] = region
-
-        elif name = 'osm':
+                        my_attrs['is_in:region'] = region
+                    country = self._bdy_container.get_country(self.node.lat, self.node.lon)
+                    if country:
+                        my_attrs['is_in:country'] = country
+                    self.writer.startElement(name, my_attrs)
+                    return
+        elif name == 'osm':
             return
         else:
             pass
@@ -169,7 +306,10 @@ class OSMXMLFileParser(xml.sax.ContentHandler):
                 if attrs['k'] == 'name':
                     self.way.name = (attrs['v'])
                 if attrs['k'] == 'admin_level':
-                    self.way.level = (int(attrs['v']))
+                    try:
+                        self.way.level = (int(attrs['v']))
+                    except ValueError:
+                        pass
         elif name == "nd":
             if self.way:
                 self.way.add_node(int(attrs['ref']))
@@ -230,15 +370,18 @@ def main(args):
     except IOError:
         logging.Critical("Can't open file: "+osmfile)
         sys.exit(1)
-    # parse osm file
+
+    print >> sys.stderr, "Parse boundary file..."
     handler = OSMXMLFileParser()
     xml.sax.parse(fp, handler)
     fp.close()
-    print >> sys.stderr,  "Nodes: %d" % (len(Nodes))
-    print >> sys.stderr,  "Ways: %d" % (len(Ways))
-    print >> sys.stderr,  "Relations: %d" % (len(Relations))
+    print >> sys.stderr,  "%8d Nodes" % (len(Nodes))
+    print >> sys.stderr,  "%8d Ways" % (len(Ways))
+    print >> sys.stderr,  "%8d Relations" % (len(Relations))
+
     # resolve dependencies and form polygons for every relation
-    bounds = Boundaries()
+    print >> sys.stderr, "Build boundary polygons..."
+    bounds = BoundaryContainer()
     for rel in Relations.values():
         bdy = Boundary(rel.level, rel.name)
         for way in rel.ways:
@@ -255,8 +398,8 @@ def main(args):
             except KeyError:
                 # way is not in data file; set flag
                 bdy.incomplete = True
-        bounds.append(bdy)
-    # before reolations: ways can maark an area, too
+        bounds.add(bdy)
+    # before relations: ways can mark an area, too
     for way in Ways.values():
         if way.level > 0 and way.name:
             bdy = Boundary(way.level, way.name)
@@ -267,9 +410,9 @@ def main(args):
                     bdy.add_node((rnode.lat,rnode.lon))
                 except KeyError:
                     bdy.incomplete = True
-            bounds.append(bdy)
+            bounds.add(bdy)
 
-    # parse target file and write enriched to stdout
+    print >> sys.stderr, "Parse target file and update nodes..."
     nodefile = args[2]
     try:
         fp = open(nodefile)
@@ -277,10 +420,13 @@ def main(args):
         logging.Critical("Can't open file: "+nodefile)
         sys.exit(1)
     # parse osm file
-    handler = OSMXMLNodeParser()
+    handler = OSMXMLNodeParser(bounds)
     xml.sax.parse(fp, handler)
     handler.cleanup()
     fp.close()
+
+    bounds.print_statistics(sys.stderr)
+    handler.print_statistics(sys.stderr)
 
 
 if __name__ == "__main__":

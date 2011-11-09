@@ -73,8 +73,6 @@ class LookupStop(webapp.RequestHandler):
                 q_pk.filter("ascii_names <", query1)
                 q_pk.filter("stop_type =", stop)
                 stops = q_pk.fetch(7)
-                logging.debug("%s %d" %(stop,len(stops)))
-                logging.debug(stops)
                 # convert from list to set
                 all_words.append(set(stops))
             # At this point we have the result sets (stop keys) for the words in the query.
