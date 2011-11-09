@@ -5,71 +5,84 @@ import xml.sax
 import json
 import unicodedata
 
-Munis={}
-
-def plainify(string):
-    """Removes all accents and special characters form string and converts
-    string to lower case. If the string is made up of several words a list
-    of these words is returned.
-
-    Returns an array of plainified strings (splitted at space)
-    """
-    res = []
-    for s1 in string.split(" "):
-        s1 = s1.strip(",.;:\\?/!@#$%^&*()[]{}|\"'")
-        s1 = unicodedata.normalize('NFD',s1.lower())
-        s1 = s1.replace("`", "")
-        s1 = s1.encode('ascii','ignore')
-        s1 = s1.replace("~", "")
-        s1 = s1.strip()
-        if len(s1):
-            res.append(s1)
-
-    return res
+# contains Nodes organized by osm_id
+Nodes={}
+# contains Ways organized by osm_id
+Ways={}
+# contains Relations organized by osm_id
+Relations={}
 
 
-class Place(object):
-    def __init__(self,osm_id,name,lat,lon):
-        self.osm_id = osm_id
-        self.name = name
+class Node(object):
+    def __init__(self,osm_id,lat,lon):
         self.lat = lat
         self.lon = lon
-        self.kind = None
+        self.osm_id = osm_id
 
+class Way(object):
+    def __init__(self,osm_id):
+        self.nodes=[]
+        self.osm_id = osm_id
+        self.level = -1
+        self.name = ""
+
+    def add_node(self, node_id):
+        self.nodes.append(node_id)
+
+
+class Relation(object):
+    def __init__(self,osm_id):
+        self.osm_id = osm_id
+        self.ways=[]
+        # levels are:
+        # 1 for country
+        #
+        self.level = -1
+        self.name = ""
+
+    def add_way(self, way_id):
+        self.ways.append(way_id)
 
 class OSMXMLFileParser(xml.sax.ContentHandler):
     def __init__(self):
-        self.counter = 0
-        self.place = None
+        self.node = None
+        self.way = None
+        self.relation = None
 
     def startElement(self, name, attrs):
         if name == 'node':
-            # Always store data in new entity while parsing.
-            # In the end, decide whether it is written to storage
-            self.place = Place(long(attrs['id']), "<no name>",
-                            float(attrs['lat']),
-                            float(attrs['lon']))
-
+            self.node = Node(attrs['osm_id'],float(attrs['lat']),float(attrs['lon']))
         elif name == 'way':
-            pass
-
+            self.way = Way(attrs['osm_id'])
         elif name == 'tag':
-            if self.place:
-                if attrs['k'] == 'name':
-                    self.place.name = attrs['v']
-                if attrs['k'] == 'place':
-                    self.place.kind = attrs['v']
-
+            if self.relation:
+                if 'boundary' in attrs:
+                    if attrs['k'] == 'name':
+                        self.relation.name(attrs['v'])
+                    if attrs['k'] == admin_level:
+                        self.relation.level(int(attrs['v']))
+                else:
+                    # we are only interested in boundary relations
+                    self.relation = None
+            if self.way:
+                if 'boundary' in attrs:
+                    if attrs['k'] == 'name':
+                        self.way.name(attrs['v'])
+                    if attrs['k'] == admin_level:
+                        self.way.level(int(attrs['v']))
         elif name == "nd":
-            pass
-
+            if self.way:
+                self.way.add_node(int(attrs['ref']))
         # not important for us
         elif name == "osm":
             pass
         elif name == "relation":
-            pass
+            self.relation = Relation(attrs['osm_id'])
         elif name == "member":
-            pass
+            if self.relation:
+                if attrs['k'] == 'role' and attrs['v'] != 'inner':
+                    if attrs['type'] == 'way':
+                        self.relation.add_way(int(attrs['ref']))
         elif name == "bound":
             pass
         else:
@@ -78,52 +91,42 @@ class OSMXMLFileParser(xml.sax.ContentHandler):
 
     def endElement(self, name):
         if name == "node":
-            placename = " ".join(plainify(self.place.name))
-            if placename in Munis:
-                # print self.place.name,self.place.lat,self.place.lon
-                del Munis[placename]
-
+            if self.node:
+                nodes[self.node.osm_id] = self.node
+                self.node = None
         elif name == "way":
-            pass
+            if self.way:
+                ways[self.way.osm_id] = self.way
+                self.way = None
         elif name == "relation":
-            pass
+            if self.relation:
+                relations[self.relation.osm_id] = relation.way
+                self.relation = None
         elif name == "osm":
             pass
         else:
             pass
 
-def parseOSMXMLFile(filename=None, content=None):
-    """
-    Use this class to load and parse OSM files.
-    """
-    handler = OSMXMLFileParser()
-    if content:
-        xml.sax.parseString(content, handler)
-    else:
-        xml.sax.parse(filename, handler)
 
 
 def main(args):
     logging.getLogger().setLevel(logging.DEBUG)
     if len(args) < 3:
         print "Usage:"
-        print args[0]+" <munifile> <osmfile>"
-        print " <munifile> contains a list of municialities, short names, province and region"
-        print " <osmfile> contains places (town, city, village). Other tags are ignored."
-    munifile = args[1]
+        print args[0]+" <osm boundary xml file>"
+        print " input file contains relations and ways tagged as boundary=administrative"
+    osmfile = args[1]
     try:
-        fp = open(munifile)
+        fp = open(osmfile)
     except IOError:
-        logging.Critical("Can't open file: "+munifile)
+        logging.Critical("Can't open file: "+osmfile)
         sys.exit(1)
-    for line in fp:
-        line = line.decode("Latin-1")
-        muni = line.split(",")
-        Munis[" ".join(plainify(muni[0]))] = muni
-    fp.close()
-    parseOSMXMLFile (filename=args[2])
-    for key in Munis.keys():
-        print key.encode("UTF-8")
+    # parse osm file
+    handler = OSMXMLFileParser()
+    xml.sax.parse(osmfile, handler)
+    # resolve dependencies and form polygons for every relation
+
+
 
 if __name__ == "__main__":
     main(sys.argv)
