@@ -78,28 +78,48 @@ class Boundary(object):
         """Calculates outline segments from pairs of its members nodes"""
         if not self.members:
             return
+
+        def connecting_segment(node_id, start, ways, left=True):
+            """return the way element's index which starts or ends with node_id
+
+            Start search at index start.
+            If the element ends with node_id, it is reversed before returning
+            """
+            for wi in range(start,len(ways)):
+                if ways[wi][0 if left else -1].osm_id == node_id:
+                    return wi
+                if ways[wi][-1 if left else 0].osm_id == node_id:
+                    ways[wi].reverse()
+                    return wi
+            return None
+
         # first build continuous outline from the members
-        def reduce_members(mem):
-            # mem is a list of ways which make the polygon. Their order is unspecified
-            # find the member which connects to the last node in the first member.
-            # and unite the two. Their node's osm_id is identical
-            m0 = mem[0]
-            for i in range(1,len(mem)):
-                m1 = mem[i]
-                if m0[-1].osm_id == m1[-1].osm_id:
-                    # m1 is reversed
-                    m1.reverse()
-                if m0[-1].osm_id == m1[0].osm_id:
-                    m0.extend(m1[1:])
-                    del mem[i]
-                    if len(mem) > 1:
-                        reduce_members(mem)
+        def merge_segments(self, ways):
+            """ ways is a list of ways which make the polygon. Their order is unspecified
+                find the member which connects to the last node in the first member.
+                and unite the two. Their node's osm_id is identical
+            """
+            for wi in range(0,len(ways)):
+                if wi > len(ways)-1:
                     break
-            # no connecting member was found for m1. Try with the rest
-            if len(mem) > 2:
-                reduce_members(mem[1:])
-            return
-        reduce_members(self.members)
+                ia = connecting_segment(ways[wi][-1].osm_id, wi+1, ways, left=True)
+                while ia:
+                    # extend current element wi with successor
+                    ways[wi].extend(ways[ia][1:])
+                    ways[ia] = ways[wi+1]
+                    del ways[wi+1]
+                    ia = connecting_segment(ways[wi][-1].osm_id, wi+1, ways, left=True)
+                # try the other end
+                ia = connecting_segment(ways[wi][0].osm_id, wi+1, ways, left=False)
+                while ia:
+                    # extend found element in place
+                    ways[ia].extend(ways[wi][1:])
+                    ways[wi] = ways[ia]
+                    del ways[ia]
+                    ia = connecting_segment(ways[wi][0].osm_id, wi+1, ways, left=False)
+
+        # function starts here
+        merge_segments(self, self.members)
         if len(self.members) == 1 and self.members[0][0].osm_id == self.members[0][-1].osm_id:
             # a perfect polygon. As first and last node are the same, delete one
             del self.members[0][-1]
@@ -367,14 +387,19 @@ class OSMXMLFileParser(xml.sax.ContentHandler):
 
 
 def print_usage():
-    print "Usage:"
-    print " <osm boundary xml file>  <osm node xml file> <out file>"
-    print " boundary input file contains relations and ways tagged as boundary=administrative"
-    print " all nodes in node xml input file which have a name will be located in the"
-    print " boundary polygons defined by the first imput file and extra tags will be "
-    print " written for them: is_in:country (admin level 2), is_in:region (admin_level 4)"
-    print " is_in:municipality (admin_level 8)"
-    print " The enriched file will be written to stdout."
+    print """Usage:
+python munis.py <osm boundary xml file>  <osm node xml file> <out file>
+
+<boundary input file>  contains relations and ways tagged as boundary=administrative
+<osm node xml file>    all nodes in this second input file which have a name will be
+                       located in the"boundary polygons defined by the first imput file.
+                       The nodes will be enriched with extra tags which describe their
+                       location. E.g.: is_in:country (admin level 2), is_in:region (admin_level 4)
+                       is_in:municipality (admin_level 8)
+<out file>             The enriched file will be written to the given filename.
+
+All diagnostic information is written to stdout.
+"""
 
 def main(args):
     logging.getLogger().setLevel(logging.DEBUG)
@@ -445,7 +470,7 @@ def main(args):
     try:
         fp = open(nodefile)
     except IOError:
-        logging.Critical("Can't open file: "+nodefile)
+        logging.critical("Can't open file: "+nodefile)
         sys.exit(1)
 
     # open output file
@@ -453,7 +478,7 @@ def main(args):
     try:
         out = open(outfile, 'w')
     except IOError:
-        logging.Critical("Can't open file: "+outfile)
+        logging.critical("Can't open file: "+outfile)
         sys.exit(1)
 
     # parse osm file

@@ -7,7 +7,9 @@
 #
 
 osmosis --read-pbf file=$1 \
-  --tf accept-ways boundary=administrative \
   --tf accept-relations boundary=administrative \
+  --tf reject-ways highway=* \
+  --tf reject-ways landuse=* \
   --used-node \
+  --used-way \
   --write-xml file=$2
